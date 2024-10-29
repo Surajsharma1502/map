@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TextInput, Dimensions } from 'react-native'
 import React, { useEffect, useRef, useState } from 'react'
-import { clearWatchId, getCurrentCoordinate, getPermissions, watchCurrentCoordinates } from '../service/GoogleMap.service'
-import MapView, { PROVIDER_GOOGLE, Marker, Callout } from 'react-native-maps';
+import { clearWatchId, decodePolyline, getCurrentCoordinate, getPermissions, watchCurrentCoordinates } from '../service/GoogleMap.service'
+import MapView, { PROVIDER_GOOGLE, Marker, Callout, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GOOGLE_MAP_API_KEY } from '../../configs';
 const screen = Dimensions.get('window');
@@ -11,6 +11,7 @@ const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 const GoogleMap = () => {
     const [sourceLocation, setSourceLocation] = useState()
     const [watchId, setWatchId] = useState()
+    const [routeCoordinate, setRouteCoordinate] = useState([])
     const [destinationLocation, setDestinationLocation] = useState({
         latitude: 29.474893500243727,
         latitudeDelta: LATITUDE_DELTA,
@@ -29,8 +30,9 @@ const GoogleMap = () => {
                     latitudeDelta: LATITUDE_DELTA,
                     longitudeDelta: LONGITUDE_DELTA,
                 })
-                const googleWatchId = watchCurrentCoordinates(handleRealTimeCoordinates)
-                setWatchId(googleWatchId)
+                await getDirectionApi(coordinate, destinationLocation)
+                // const googleWatchId = watchCurrentCoordinates(handleRealTimeCoordinates)
+                // setWatchId(googleWatchId)
             }
         } catch (error) {
             console.error(error)
@@ -47,6 +49,36 @@ const GoogleMap = () => {
             longitudeDelta: LONGITUDE_DELTA,
         })
     }
+    const getDirectionApi = async (origin, destination) => {
+        try {
+            const response = await fetch(
+                `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAP_API_KEY}`
+            );
+            const data = await response.json();
+            const coordinates = decodePolyline(data.routes[0].overview_polyline.points)
+            setRouteCoordinate(coordinates)
+            moveLocation(coordinates)
+        } catch (error) {
+            console.log(error)
+        }
+    }
+
+    const moveLocation = (coordinate) => {
+        var i = 0
+
+        let timeInterval=setInterval(() => {
+            if(i>=coordinate.length){
+                clearInterval(timeInterval)
+
+            }else{
+                setSourceLocation((old) => ({ ...old, ...coordinate[i] }))
+                setRouteCoordinate(old=>old.slice(1))
+                i++
+            }
+        }, 1000)
+    }
+
+
     useEffect(() => {
         getCurrentLocation()
         return () => {
@@ -73,15 +105,12 @@ const GoogleMap = () => {
                                 </View>
                             </Callout>
                         </Marker>}
-                        <MapViewDirections
-                            origin={sourceLocation}
-                            destination={destinationLocation}
-                            apikey={GOOGLE_MAP_API_KEY}
-                            tappable={true}
+                        {routeCoordinate.length ? <Polyline
+                            coordinates={routeCoordinate}
+                            fillColor='blue'
+                            strokeColor='blue'
                             strokeWidth={5}
-                            strokeColor={'blue'}
-                            mode={'DRIVING'}
-                        />
+                        />:<></>}
                     </MapView>}
                 </View>}
         </View>
